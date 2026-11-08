@@ -1,5 +1,7 @@
 import pytest
-from text_encryptor.encryptor import encrypt_text, decrypt_text
+from cryptography.fernet import InvalidToken
+
+from text_encryptor.encryptor import decrypt_text, encrypt_text
 
 
 def test_encrypt_decrypt():
@@ -18,5 +20,5 @@ def test_wrong_password():
     """Test that wrong password fails."""
     encrypted = encrypt_text("secret", "correct_password")
 
-    with pytest.raises(Exception):
+    with pytest.raises(InvalidToken):
         decrypt_text(encrypted, "wrong_password")

@@ -2,15 +2,18 @@
 CLI interface for text-encryptor.
 """
 
+import binascii
+
 import click
-from .encryptor import encrypt_text, decrypt_text, encrypt_file, decrypt_file
+from cryptography.fernet import InvalidToken
+
+from .encryptor import decrypt_file, decrypt_text, encrypt_file, encrypt_text
 
 
 @click.group()
 @click.version_option()
 def main():
     """Text Encryptor - Secure text encryption and decryption."""
-    pass
 
 
 @main.command()
@@ -30,21 +33,30 @@ def decrypt(text, password):
     try:
         decrypted = decrypt_text(text, password)
         click.echo(f"🔓 Decrypted: {decrypted}")
-    except Exception:
-        click.echo("❌ Decryption failed - wrong password or corrupted data", err=True)
+    except (InvalidToken, binascii.Error, UnicodeError) as exc:
+        raise click.ClickException(
+            "Decryption failed - wrong password or corrupted data"
+        ) from exc
 
 
-@main.command()
+@main.command("encrypt-file")
 @click.option("-i", "--input", required=True, help="Input file")
 @click.option("-o", "--output", required=True, help="Output encrypted file")
 @click.option("-p", "--password", required=True, help="Encryption password")
 def encrypt_file_cmd(input, output, password):
     """Encrypt a file."""
-    encrypt_file(input, output, password)
+    try:
+        encrypt_file(input, output, password)
+    except FileExistsError as exc:
+        raise click.ClickException(
+            f"Output already exists: {output}. Choose a new output path."
+        ) from exc
+    except OSError as exc:
+        raise click.ClickException(f"Could not encrypt file: {exc}") from exc
     click.echo(f"✅ File encrypted: {output}")
 
 
-@main.command()
+@main.command("decrypt-file")
 @click.option("-i", "--input", required=True, help="Input encrypted file")
 @click.option("-o", "--output", required=True, help="Output decrypted file")
 @click.option("-p", "--password", required=True, help="Decryption password")
@@ -53,8 +65,16 @@ def decrypt_file_cmd(input, output, password):
     try:
         decrypt_file(input, output, password)
         click.echo(f"✅ File decrypted: {output}")
-    except Exception:
-        click.echo("❌ Decryption failed - wrong password or corrupted file", err=True)
+    except InvalidToken as exc:
+        raise click.ClickException(
+            "Decryption failed - wrong password or corrupted file"
+        ) from exc
+    except FileExistsError as exc:
+        raise click.ClickException(
+            f"Output already exists: {output}. Choose a new output path."
+        ) from exc
+    except OSError as exc:
+        raise click.ClickException(f"Could not decrypt file: {exc}") from exc
 
 
 if __name__ == "__main__":

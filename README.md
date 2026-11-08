@@ -35,13 +35,25 @@ text-encryptor decrypt -t "gAAAAAB..." -p "mypassword"
 
 ### Encrypt File
 ```bash
-text-encryptor encrypt-file -i secret.txt -i secret.enc -p "mypassword"
+text-encryptor encrypt-file -i secret.txt -o secret.enc -p "mypassword"
 ```
 
 ### Decrypt File
 ```bash
-text-encryptor decrypt-file -i secret.enc -o secret.txt -p "mypassword"
+text-encryptor decrypt-file -i secret.enc -o recovered.txt -p "mypassword"
 ```
+
+File outputs must use a new path. Existing files, the input itself, hard links,
+and symbolic links are never overwritten. Choose another output name if one
+already exists. New output files are owner-readable/writable only on POSIX.
+An interrupted or failed write may leave an incomplete new output; keep the
+original input until you have successfully decrypted and checked the result.
+
+Commands return a nonzero exit status on invalid input, a wrong password,
+corrupted ciphertext, or file errors. Errors go to standard error.
+
+The `-p` examples use demonstration passwords. Real passwords supplied on the
+command line can be exposed in shell history and process listings.
 
 ## 🐍 Python API
 

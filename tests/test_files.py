@@ -118,6 +118,33 @@ def test_output_created_during_operation_is_not_overwritten(
     assert output.read_bytes() == b"Created by another writer"
 
 
+def test_dangling_symlink_created_during_open_is_not_followed(
+    operation, tmp_path, monkeypatch
+):
+    transform, source = operation
+    original = source.read_bytes()
+    output = tmp_path / "raced-link"
+    target = tmp_path / "missing-target"
+    real_opener = encryptor._private_opener
+
+    def racing_opener(path, flags):
+        try:
+            Path(path).symlink_to(target)
+        except OSError as exc:
+            if os.name == "nt":
+                pytest.skip(f"Symlinks unavailable for this Windows user: {exc}")
+            raise
+        return real_opener(path, flags)
+
+    monkeypatch.setattr(encryptor, "_private_opener", racing_opener)
+    with pytest.raises(FileExistsError):
+        transform(source, output, "test-password")
+
+    assert source.read_bytes() == original
+    assert output.is_symlink()
+    assert not target.exists()
+
+
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits")
 def test_new_outputs_are_private(operation, tmp_path):
     transform, source = operation

@@ -52,7 +52,57 @@ def decrypt_text(encrypted_text: str, password: str) -> str:
 
 def _private_opener(path, flags):
     """Create new output files readable only by their owner on POSIX."""
+    if os.name == "nt":
+        return _open_windows_new_file(path)
     return os.open(path, flags, 0o600)
+
+
+def _open_windows_new_file(path):
+    """Create a Windows file without traversing a final symlink/reparse point.
+
+    The Windows CRT's O_EXCL can follow a dangling symlink and create its
+    target. CREATE_NEW with OPEN_REPARSE_POINT rejects the link itself in
+    one operation, including links created concurrently with this call.
+    """
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    create_file.restype = wintypes.HANDLE
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = [wintypes.HANDLE]
+    close_handle.restype = wintypes.BOOL
+
+    handle = create_file(
+        os.fsdecode(path),
+        0x40000000,  # GENERIC_WRITE
+        0,  # Do not share the output while it is being written.
+        None,
+        1,  # CREATE_NEW: fail if the destination already exists.
+        0x00200080,  # FILE_FLAG_OPEN_REPARSE_POINT | FILE_ATTRIBUTE_NORMAL
+        None,
+    )
+    if handle == ctypes.c_void_p(-1).value:
+        error = ctypes.WinError(ctypes.get_last_error())
+        error.filename = os.fsdecode(path)
+        raise error
+    try:
+        # The descriptor owns the handle after a successful conversion.
+        return msvcrt.open_osfhandle(handle, os.O_WRONLY | os.O_BINARY | os.O_NOINHERIT)
+    except BaseException:
+        close_handle(handle)
+        raise
 
 
 def _write_new_file(output_path, content):

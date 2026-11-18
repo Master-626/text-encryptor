@@ -1,3 +1,4 @@
+import errno
 import os
 import stat
 from pathlib import Path
@@ -202,3 +203,79 @@ def test_missing_output_parent_does_not_change_input(operation, tmp_path):
     with pytest.raises(FileNotFoundError):
         transform(source, tmp_path / "missing" / "output", "test-password")
     assert source.read_bytes() == original
+
+
+def test_directory_input_is_rejected(tmp_path):
+    output = tmp_path / "output"
+    for transform in (encrypt_file, decrypt_file):
+        with pytest.raises(IsADirectoryError):
+            transform(tmp_path, output, "test-password")
+        assert not output.exists()
+
+
+@pytest.mark.skipif(not os.path.exists("/dev/null"), reason="no /dev/null")
+def test_device_input_is_rejected(tmp_path):
+    output = tmp_path / "output"
+    for transform in (encrypt_file, decrypt_file):
+        with pytest.raises(OSError, match="Not a regular file") as exc_info:
+            transform("/dev/null", output, "test-password")
+        assert not isinstance(exc_info.value, FileNotFoundError)
+        assert not output.exists()
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFOs are not supported")
+def test_fifo_input_is_rejected_without_blocking(tmp_path):
+    fifo = tmp_path / "fifo"
+    try:
+        os.mkfifo(fifo)
+    except OSError as exc:
+        pytest.skip(f"Could not create a FIFO: {exc}")
+    output = tmp_path / "output"
+    for transform in (encrypt_file, decrypt_file):
+        with pytest.raises(OSError, match="Not a regular file"):
+            transform(fifo, output, "test-password")
+        assert not output.exists()
+
+
+def test_symlink_to_regular_file_can_be_read(tmp_path):
+    source = tmp_path / "source"
+    link = tmp_path / "link"
+    encrypted = tmp_path / "encrypted"
+    restored = tmp_path / "restored"
+    source.write_bytes(b"via-symlink")
+    try:
+        link.symlink_to(source)
+    except OSError as exc:
+        if os.name == "nt":
+            pytest.skip(f"Symlinks unavailable for this Windows user: {exc}")
+        raise
+
+    encrypt_file(link, encrypted, "test-password")
+    decrypt_file(encrypted, restored, "test-password")
+    assert restored.read_bytes() == b"via-symlink"
+
+
+def test_failed_write_removes_partial_output_and_can_be_retried(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    output = tmp_path / "output"
+    restored = tmp_path / "restored"
+    source.write_bytes(b"retry-me")
+    real_write = encryptor.os.write
+    calls = {"n": 0}
+
+    def fail_once(fd, data):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            real_write(fd, data[:4])
+            raise OSError(errno.ENOSPC, "No space left on device")
+        return real_write(fd, data)
+
+    monkeypatch.setattr(encryptor.os, "write", fail_once)
+    with pytest.raises(OSError, match="No space left"):
+        encrypt_file(source, output, "test-password")
+    assert not output.exists()
+    assert source.read_bytes() == b"retry-me"
+
+    encrypt_file(source, output, "test-password")
+    decrypt_file(output, restored, "test-password")
+    assert restored.read_bytes() == b"retry-me"

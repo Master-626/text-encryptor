@@ -108,7 +108,7 @@ python -m ruff check .
 python -m pytest
 ```
 
-Continuous integration runs `ruff` and `pytest` on Python 3.8 through 3.13 (3.8 on Ubuntu 24.04) and on Windows with Python 3.12. The 3.8 job also reinstalls the oldest declared Click, cryptography, and pytest versions.
+Continuous integration runs `ruff` and `pytest` on Python 3.8 through 3.13 and on Windows with Python 3.12. Python 3.8 and 3.9 run on Ubuntu 22.04, because current GitHub-hosted Ubuntu images do not provide those builds. Newer versions run on `ubuntu-latest`. The 3.8 job also reinstalls the oldest declared Click, cryptography, and pytest versions.
 
 ## License
 

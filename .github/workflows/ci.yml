@@ -14,11 +14,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Python 3.8 builds are available for Ubuntu 24.04, not 26.04.
-          - os: ubuntu-24.04
+          # setup-python publishes 3.8 and 3.9 for Ubuntu 22.04, not 26.04.
+          - os: ubuntu-22.04
             python: "3.8"
             minimum: true
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             python: "3.9"
             minimum: false
           - os: ubuntu-latest
